@@ -1,0 +1,311 @@
+\documentclass[onecolumn,12pt]{IEEEtran} % single-column IEEE look
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb,amsfonts,amsthm}
+\usepackage{mathtools}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{siunitx}
+\usepackage{xcolor}
+\usepackage{placeins} 
+\usepackage[hidelinks]{hyperref}
+\usepackage[numbers,sort&compress]{natbib} 
+
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+
+\title{Edge-Ready Unsupervised Bearing Fault Detection with a Lightweight VAE}
+
+\author{
+\IEEEauthorblockN{Md Jawadul Karim,}
+\IEEEauthorblockA{MSc. in Computer Science and Engineering\\
+BRAC University, Merul Badda, Dhaka, Bangladesh\\
+Email: md.jawadul.karim@g.bracu.ac.bd}
+}
+
+\date{} 
+
+\begin{document}
+\maketitle
+
+
+\begin{abstract}
+The reliable detection of bearing faults is critical for predictive maintenance in rotating machinery, where unexpected failures can lead to costly downtime and safety risks. Conventional supervised learning methods demand extensive labeled datasets and high computational capacity, making them unsuitable for deployment in resource-constrained industrial environments. To address this challenge, we propose a lightweight unsupervised fault detection framework based on a Variational Autoencoder (VAE) trained exclusively on normal operating data. Time- and frequency-domain statistical features are extracted from the NASA/IMS bearing dataset and used as compact inputs to the VAE, enabling efficient anomaly scoring via reconstruction error. Decision thresholds are derived through both a conservative percentile-based scheme and an Extreme Value Theory (EVT) approach for principled tail modeling. The trained model is quantized to INT8 and deployed on an NVIDIA Jetson Nano to demonstrate feasibility in embedded, real-time settings. Experimental results show perfect separability between normal and faulty states (AUROC = 1.0, AUPR = 1.0), with high precision (88.4\%) and recall (\(\approx\)100\%) achieved under the percentile threshold. The deployment achieves inference latencies of \(\sim\)0.6~ms per sample, validating suitability for edge monitoring applications. This work highlights the potential of combining engineered features with unsupervised representation learning for scalable, on-device condition monitoring. Compared with existing literature that emphasizes increasingly complex deep models, the proposed method strikes a balance between accuracy, interpretability, and computational efficiency, offering a practical solution for real-world predictive maintenance.
+\end{abstract}
+
+-
+\begin{IEEEkeywords}
+Anomaly detection; Predictive maintenance; Variational autoencoder (VAE); Embedded deployment; Jetson Nano; Vibration analysis; Extreme value theory (EVT); Real-time inference.
+\end{IEEEkeywords}
+
+ \vspace{30pt} 
+
+\section{Introduction}\label{sec:intro}
+The rapid growth of industrial automation and the increasing demand for reliable machinery operation have made predictive maintenance a critical area of research \cite{yamikar2022aipm}. Rotating machinery, particularly bearings, forms the backbone of many industrial systems, including turbines, motors, and production lines. Bearing faults, if undetected, can lead to catastrophic machine failure, costly downtime, and safety hazards. Consequently, condition monitoring and fault detection have become central to ensuring operational efficiency. Within this context, machine learning (ML) has emerged as a promising tool, enabling data-driven diagnostics based on vibration signals, current measurements, and sensor readings \cite{prajapati2025otcon}. Traditionally, fault detection has been carried out using statistical methods, handcrafted feature extraction, and supervised learning models. These approaches rely heavily on labeled fault data, expert domain knowledge, and resource-intensive feature engineering pipelines. Moreover, most prior research assumes access to high-performance computing systems or cloud-based resources to train and deploy models. While these methods have achieved reasonable performance in laboratory settings, they are often unsuitable for real-world industrial applications where computational power, connectivity, and latency constraints exist. For example, deploying deep neural networks or large ensemble models on standard microcontrollers is impractical due to memory and energy limitations.
+
+Recent advances in lightweight machine learning (ML) present a new paradigm, bringing intelligence directly to low-power and resource-constrained edge devices such as the Jetson Nano. Such ML enables real-time inference without the need for continuous cloud connectivity, reducing latency, improving privacy, and lowering operational costs. This is particularly valuable for industrial settings where network reliability cannot be guaranteed and where transmitting large amounts of vibration data to remote servers is inefficient \cite{wang2025fcs}. Most studies continue to focus on conventional ML methods running on high-end platforms, leaving a gap in lightweight, embedded approaches for predictive maintenance. Another key challenge lies in the scarcity of labeled data for faulty conditions. Bearings spend the majority of their operational life in a normal state, meaning fault datasets are often imbalanced or incomplete. Supervised models require substantial fault examples to generalize effectively, which are rarely available. Here, unsupervised learning offers a compelling alternative by training models exclusively on data from normal operating conditions. The system learns the normal behavior of the bearing and flags deviations during evaluation as potential faults. This approach eliminates the dependence on large fault datasets, aligning more closely with real industrial scenarios.
+
+The NASA Bearing Dataset provides a well-known benchmark for this research. It contains vibration signals from bearings operating under various conditions until failure, making it suitable for unsupervised learning frameworks. By extracting segments corresponding to normal bearings for training, and near-faulty segments for evaluation, a realistic workflow is established. Embedding such a pipeline into a resource-limited device like the Jetson Nano demonstrates the feasibility of deploying predictive maintenance solutions at the edge. This work, therefore, positions itself at the intersection of industrial fault detection, unsupervised learning, and embedded intelligence. By focusing on lightweight ML deployment, it addresses the limitations of prior approaches that neglect hardware constraints, while emphasizing the necessity of real-time, low-power solutions for scalable predictive maintenance. The proposed approach not only contributes to academic research but also opens pathways for practical industrial adoption, where cost-effective and autonomous monitoring systems are increasingly essential.
+
+
+ \vspace{30pt} 
+\section{Literature Review}\label{sec:lit}
+Early studies on unsupervised bearing fault diagnosis placed strong emphasis on feature engineering and clustering. Cheng \emph{et~al.} \cite{cheng2022featureae} proposed an autoencoder-based framework combined with sensitivity-driven feature selection to diagnose multiple bearing faults, including imbalance, lubrication loss, and contamination. Their setup involved a high-speed spindle rig with multimodal sensing (accelerometers, microphone, AE sensor, thermocouple) across 60 operating scenarios. Time-domain features (e.g., RMS, kurtosis, entropy) and frequency-domain indices (STFT, octave bands) were extracted, followed by feature screening to identify the most informative measures. The approach significantly improved clustering quality, with Q-factor gains from 0.45 to 1.51 for unbalance and from 2.01 to 3.32 for contamination, demonstrating the role of feature selection in enhancing unsupervised diagnostic reliability. Building on autoencoder architectures, Marx \emph{et~al.} \cite{marx2022phm} introduced domain knowledge into anomaly detection for rolling element bearings. Their method generated squared envelope spectra from accelerometer signals and further augmented the data by injecting synthetic peaks corresponding to inner race, outer race, and ball faults. Training the autoencoder with both normal and augmented spectra guided the latent space to align with physically meaningful fault directions. Evaluation on both a phenomenological dataset and the NASA IMS bearing dataset confirmed the interpretability and effectiveness of this approach, producing health indicators that detected most fault types and offering a path toward time–frequency extensions.
+
+A recent study proposed by Dai \emph{et~al.} \cite{dai2025sensors} presented the ADBR model for early bearing anomaly detection, addressing data imbalance and scarce fault samples. Raw vibration signals were preprocessed using the Ricker wavelet transform, then processed through a BYOL-based contrastive learning network with an added reconstruction loss to preserve local details. This design avoided reliance on negative samples and improved feature representation. On the CWRU dataset, ADBR achieved 96.97\% accuracy, while on the IMS dataset it detected faults at least 2.3~hours earlier than other methods. Validation on the XJTU-SY dataset confirmed its superior generalization ability. In parallel, low-cost hardware–software solutions have been explored for broader accessibility and educational applications. Herrera \emph{et~al.} \cite{cotrino2025hardwarex} developed an open-source TinyML-based prototype for real-time bearing fault detection. Their system integrated a DC motor, MPU6050 inertial sensors, and microcontrollers (Arduino BLE Sense, ESP32) with 3D-printed and acrylic structures. Vibration signals were transformed into FFT-based features across time and frequency domains, which were then classified by a multilayer perceptron neural network deployed via Edge Impulse. This lightweight system effectively distinguished good from faulty bearings, underscoring the potential of embedded AI for predictive maintenance in resource-constrained environments.
+
+More recently, deep learning methods have advanced the state of unsupervised anomaly detection in bearing applications. Hua \emph{et~al.} \cite{hua2023para} proposed a parallel long short-term memory (PARA-LSTM) network to analyze NASA IMS bearing time-series data. Their model incorporated dual pathways, a health model and a state model, whose outputs were fused for robust prediction. Preprocessing steps included normalization, PCA, and Mahalanobis distance analysis. Comparative results demonstrated that PCA detected failures four days before breakdown, standard LSTM detected one day earlier, while PARA-LSTM identified anomalies five days in advance, all while avoiding false alarms. This architecture improved generalization, stability, and early detection capability, marking a notable advancement over traditional time-series approaches.
+
+Collectively, these works highlight the progression of unsupervised bearing fault detection research, from feature-centric clustering and autoencoders, to domain-informed augmentation, hardware-efficient TinyML prototypes, and advanced deep recurrent models, demonstrating a clear trajectory toward interpretable, scalable, and robust predictive maintenance systems.
+ \vspace{30pt} 
+
+\section{Methodology}\label{sec:method}
+
+\subsection{Model Architecture}\label{subsec:model-arch}
+The central model adopted in this work is a Variational Autoencoder (VAE), chosen for its ability to learn non-deterministic latent representations in an unsupervised manner \cite{abdulaziz2024anne}. The model operates on extracted statistical and spectral features of vibration signals and is trained solely on data from normal operational states. By attempting to reconstruct these nominal patterns, the VAE captures the intrinsic structure of normal behavior; deviations in reconstruction during inference are interpreted as anomalies associated with faulty conditions. This approach not only ensures robustness to noise but also facilitates uncertainty quantification, a desirable property for safety-critical monitoring tasks.
+
+At the core of the architecture lies an encoder–decoder topology. The encoder maps each input vector $\mathbf{x}\!\in\!\mathbb{R}^{d}$ into a latent representation through successive non-linear transformations. Specifically, two fully connected layers with 256 and 128 neurons (ReLU activations) reduce the dimensionality while preserving relevant statistical variation. Unlike a deterministic autoencoder, the encoder outputs two distinct vectors, the latent mean $\boldsymbol{\mu}(\mathbf{x})$ and log-variance $\log \boldsymbol{\sigma}^{2}(\mathbf{x})$—which together parameterize a Gaussian distribution. A latent variable is then sampled using the reparameterization trick (Eq.~\eqref{eq:reparam}), ensuring differentiability of the stochastic pathway:
+\begin{equation}
+\mathbf{z} \;=\; \boldsymbol{\mu}(\mathbf{x}) \;+\; \boldsymbol{\sigma}(\mathbf{x}) \odot \boldsymbol{\epsilon}, 
+\quad \boldsymbol{\epsilon}\sim\mathcal{N}(\mathbf{0},\mathbf{I}) .
+\label{eq:reparam}
+\end{equation}
+This stochastic encoding allows the VAE to explore the latent manifold more effectively and to generalize beyond the training data \cite{kingma2019vae}. The decoder mirrors the encoder, progressively expanding the latent vector $\mathbf{z}\!\in\!\mathbb{R}^{8}$ back into the input space via two hidden layers (128 and 256 neurons, ReLU) that reconstruct the features, followed by a sigmoid output layer that constrains values within the normalized $[0,1]$ range.
+
+\subsection{Training Objective and Inference}\label{subsec:objective}
+Training maximizes the Evidence Lower Bound (ELBO), optionally with a $\beta$-weight to control latent regularization (Eq.~\eqref{eq:elbo}):
+\begin{align}
+\mathcal{L}_{\text{ELBO}}(\theta,\phi)
+&= \mathbb{E}_{q_{\phi}(\mathbf{z}\mid\mathbf{x})}\!\left[\log p_{\theta}(\mathbf{x}\mid\mathbf{z})\right]
+\;-\; \beta \,\mathrm{KL}\!\left(q_{\phi}(\mathbf{z}\mid\mathbf{x}) \,\|\, p(\mathbf{z})\right), 
+\label{eq:elbo}
+\end{align}
+where the first term encourages faithful reconstruction and the second regularizes the latent distribution toward the prior $p(\mathbf{z})=\mathcal{N}(\mathbf{0},\mathbf{I})$, yielding a smooth, structured embedding. We employ a warm-up schedule that gradually increases $\beta$ during early epochs, stabilizing training by prioritizing reconstruction before enforcing latent constraints.
+
+During inference, stochastic sampling is bypassed: only the mean vector $\boldsymbol{\mu}(\mathbf{x})$ is propagated through the decoder, providing deterministic outputs compatible with deployment constraints while the training phase benefits from stochastic exploration. Anomaly scores are derived from the reconstruction error,
+\begin{equation}
+s(\mathbf{x}) \;=\; \big\|\mathbf{x}-\hat{\mathbf{x}}\big\|_2^{2},
+\label{eq:score}
+\end{equation}
+and thresholding strategies (e.g., normal-percentile or EVT-based calibration) distinguish between normal and near-faulty signals.
+
+\paragraph*{Summary}  
+This VAE architecture provides a principled framework for unsupervised anomaly detection. Its encoder–decoder design, stochastic latent regularization, and deterministic inference path together balance representational power, stability, and efficiency, enabling effective and deployable monitoring on resource-limited platforms.
+
+
+\subsection{Metrics}\label{subsec:metrics}
+To comprehensively assess the performance of the unsupervised anomaly detection framework, we employ metrics at both the score and decision levels. 
+At the \emph{score distribution} level, we report the Area Under the Receiver Operating Characteristic curve (AUROC) and the Area Under the Precision–Recall curve (AUPR). 
+AUROC measures overall separability between normal and faulty bearings by quantifying how consistently higher reconstruction errors are assigned to anomalies than to normal samples. 
+AUPR is well suited to the strong class imbalance in fault detection, emphasizing how well precision is maintained as recall increases \cite{mcdermott2024auprc}. 
+Together, these curves provide a threshold-independent view of detection capability.
+
+At the \emph{decision} level, we threshold reconstruction errors to obtain binary predictions. 
+We consider two strategies: 
+(i) a percentile-based cutoff using the 99.5th percentile of normal reconstruction errors (conservative, simple), and 
+(ii) an Extreme Value Theory (EVT) threshold that models the upper tail of normal errors to set a principled anomaly boundary. 
+Using these thresholds, we compute Precision (fraction of flagged samples that are truly faulty), Recall (fraction of near-faulty samples correctly detected), and the F1-Score, 
+capturing the trade-off between missed detections and false alarms, critical in predictive maintenance. 
+Beyond detection accuracy, we assess representation quality via \emph{Trustworthiness} and \emph{Continuity}, which quantify how well local neighborhoods are preserved between input and latent spaces. For stochastic models, we also report \emph{Uncertainty (Fault)} as the variability of reconstruction errors across multiple Monte Carlo passes; elevated uncertainty flags ambiguous or out-of-distribution signals. Finally, visual diagnostics complement the numerical scores: 3D PCA scatter plots reveal normal vs.\ faulty separability in latent space; log-scale histograms (\texttt{hist\_log}) show overlap and heavy tails in error distributions; and ROC curves illustrate the evolution of true-positive vs.\ false-positive rates across thresholds. 
+This suite yields accurate, interpretable, threshold-stable, and uncertainty-aware evaluations suitable for bearing condition monitoring.
+
+
+\begin{table}[h]
+\centering
+\caption{Hyperparameters used for model training and evaluation.}
+\label{tab:hparams}
+\footnotesize
+\begin{tabular}{@{}ll ll@{}}
+\toprule
+\textbf{Parameter} & \textbf{Value} & \textbf{Parameter} & \textbf{Value} \\
+\midrule
+Batch size & 256 & Latent dimension ($z$) & 8 \\
+Epochs (VAE) & 40 & Trustworthiness neighbors ($N_{\text{neigh}}$) & 10 \\
+Optimizer & AdamW & Percentile threshold & 99.5\% \\
+Training/Deploy precision & Float16 $\rightarrow$ Int8 & Learning rate ($\eta$) & 0.001 \\
+$\beta$ warm-up scheduler & 0.0--1.0 & Noise std (encoder input) & 0.01 \\
+Seeds & 47, 101, 147, 202, 247, 303, 347, 404, 447, 505 & Monte Carlo passes & 5 \\
+\bottomrule
+\end{tabular}
+\vspace{0.25em}
+
+\raggedright\footnotesize
+Notes: 
+$N_{\text{neigh}}$ is the neighborhood size used in trustworthiness/continuity; 
+the percentile threshold is computed on normal errors; 
+Float16$\rightarrow$Int8 indicates training in half precision with INT8 deployment. 
+\end{table}
+
+ \vspace{30pt} 
+\section{Dataset Preparation and Environment}\label{sec:data}
+
+\subsection{Data Description and Preprocessing}\label{subsec:data-prep}
+For this work, we use the NASA Bearing Dataset (also known as IMS Bearings) \cite{nasaIMSportal}, sourced from a publicly available repository on Kaggle \cite{kaggleIMS2020}. 
+This dataset is widely recognized for bearing fault detection research and contains vibration signals from bearings operating under both normal and near-degrading conditions. 
+Four bearings were mounted on a common shaft and driven at a constant \SI{2000}{RPM} by an AC motor coupled through rubber belts. 
+A \SI{6000}{lb} radial load was applied to the shaft–bearing assembly via a spring-loaded mechanism, and all bearings operated under forced lubrication. 
+Vibration was captured using PCB 353B33 High-Sensitivity Quartz ICP accelerometers affixed to the bearing housings, with sensor locations indicated in Figure 1. 
+For Data Set~1, two accelerometers were installed on each bearing to measure the $x$- and $y$-axis responses, whereas Data Sets~2 and~3 (ours) used a single accelerometer per bearing. 
+Notably, all observed failures occurred only after the bearings had surpassed their design life, exceeding 100 million revolutions.
+\usepackage{caption}   %
+\begin{center}
+\begin{minipage}{\linewidth}
+  \centering
+  \includegraphics[width=\linewidth]{1.png}
+  \captionof{Fig. 1. {Accelerometer mounting and sensor locations on the bearing housings.}
+  \label{fig:sensor-locs}
+\end{minipage}
+\end{center}
+
+ \vspace{15pt} 
+The original dataset is organized as multiple time-stamped files, each recording the vibration response of four bearings. 
+To enable consistent analysis, we merged these files in chronological order, producing a single consolidated table with $\sim$129{,}515{,}520 rows and four columns (one per bearing). 
+Although the dataset captures the complete operational life of the bearings, the initial readings and the terminal phase contain transitional effects that are not suitable for model training. 
+As the bearings approach failure, the signals exhibit sharp rises in amplitude and irregular oscillations that deviate substantially from normal operation. 
+Figure 2 shows this behavior for Bearings~1--4: vibration amplitudes remain relatively stable for most of the lifecycle and increase abruptly near the end.
+
+To avoid training bias and ensure realistic performance evaluation, the dataset was divided into two subsets. 
+For training, a segment between row indices \texttt{6{,}475{,}775} and \texttt{120{,}563{,}968} was selected, representing bearings in stable, non-faulty operation. 
+In contrast, the final portion of the dataset, where signal instability and fault patterns begin to emerge, was reserved exclusively for model evaluation.
+
+
+
+\begin{center}
+\begin{minipage}{\linewidth}
+  \centering
+  \includegraphics[width=\linewidth]{2.png}
+  \captionof{Fig. 2. {Lifecycle trends for Bearings 1–4: stable amplitudes during normal operation followed by abrupt increases near end-of-life.}
+  \label{fig:sensor-locs}
+\end{minipage}
+\end{center}
+ \vspace{15pt} 
+
+\subsection{Data Feature Engineering}\label{subsec:feature-eng}
+Given the large size and temporal continuity of the NASA/IMS bearings data, we did not apply augmentation; instead, we emphasized robust descriptors that capture both temporal and spectral behavior of the vibration signals. The raw streams were processed using overlapping windows of \texttt{2,048} samples with a hop of \texttt{512}, ensuring adequate temporal resolution while controlling redundancy across adjacent segments. For each window, we extracted time-domain statistics, including mean, standard deviation, root mean square (RMS), mean absolute deviation, peak-to-peak value, skewness, kurtosis, crest factor, and impulse factor, that summarize amplitude distribution, variability, and higher-order nonlinearity in the waveform. Complementing these descriptors, frequency-domain information was obtained via the Fast Fourier Transform (FFT) to compute spectral centroid, bandwidth, roll-off, flatness, entropy, dominant frequency, peak ratio, and energy within selected sub-bands, thereby capturing harmonic content, spectral spread, and tail behavior of the spectrum. This combined temporal–spectral representation yields a comprehensive view of bearing dynamics without requiring synthetic data. The resulting features were serialized to structured CSV files to form manageable inputs for the unsupervised learning stage. In doing so, the training split reliably reflected normal operating conditions, while the evaluation split preserved realistic progression toward fault, aligning the feature distribution with practical predictive-maintenance scenarios.
+
+\subsection{Environment Setup}\label{subsec:env}
+The experimental workflow was executed in two stages: cloud-based model training followed by real-time edge testing. For training, we used the Kaggle platform, which provides a high-performance, reproducible Python environment with preconfigured machine learning libraries. Experiments ran on an NVIDIA Tesla~T4 GPU (16~GB) alongside 30~GB of system RAM, enabling large-scale handling of vibration-derived feature tables, efficient training of the variational autoencoder (VAE), and multi-seed evaluation. The consistent software stack and notebook-based execution facilitated rapid iteration and strict reproducibility. For real-time evaluation, deployment shifted to an NVIDIA Jetson Nano B01, a compact edge-compute module chosen to reflect the resource constraints typical of on-device condition monitoring. In contrast to the GPU-accelerated training environment, inference on the Nano was executed primarily on its onboard CPU to stress-test latency and throughput under limited compute and power budgets. The trained VAE was exported to TensorFlow~Lite, optimized, and deployed on the device to process feature rows sequentially, emulating online fault detection from streaming measurements. This dual configuration, GPU-accelerated training in the cloud and CPU-bound inference at the edge demonstrates a practical bridge between high-performance model development and low-power, stand-alone deployment for predictive maintenance applications.
+
+ \vspace{30pt} 
+\section{Results}\label{sec:results}
+
+\subsection{Numerical Metrics}\label{subsec:numeric}
+The proposed unsupervised anomaly detection framework was evaluated on the NASA/IMS bearing dataset, a widely used benchmark noted for signal quality and clean labeling. Because training uses only normal signals, the task requires generalization to unseen fault conditions without supervision. Among ten random initializations, seed~303 yielded the strongest overall performance and is reported here in detail. The Variational Autoencoder (VAE) achieved perfect discrimination, with both AUROC and AUPR equal to~1.0, indicating complete separation between normal and faulty samples when ranked by reconstruction error. At the chosen operating point, the percentile-based decision threshold on normal reconstruction errors was \(0.797\), whereas the Extreme Value Theory (EVT) threshold was considerably higher at \(9.6\), reflecting robustness to heavy-tailed score distributions. Under the deployment-friendly percentile rule, classification remained strong: precision \(=88.42\%\), recall \(\approx 100\%\), and \(F1=93.85\%\). In safety-critical contexts, such behavior is desirable because missed faults are costlier than occasional false alarms. Latent-space quality metrics further supported reliability. Trustworthiness \(=92.97\%\) and continuity \(=91.74\%\) indicate that local neighborhoods and global structure are preserved by the embedding. Fault uncertainty, measured as the variability of reconstruction errors across Monte Carlo passes, was low at \(3.31\%\), suggesting stable predictions despite stochastic sampling. Finally, across 10 seeds, performance was highly stable: AUROC and AUPR remained perfect with negligible variation (AUROC std \(\approx 3.7\times 10^{-17}\), AUPR std \(=0.0\)); \(F1\), precision, and recall also showed \(0.0\) std. Representation metrics varied only slightly (trustworthiness std \(=0.35\), continuity std \(=0.9\)), confirming robustness to initialization and ensuring reproducible anomaly detection outcomes.
+
+\begin{table}[h]
+\centering
+\caption{Numerical metrics (seed 303). Percentages are shown in the middle column; standard deviations are across 10 seeds.}
+\label{tab:results_main}
+\footnotesize
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Metric} & \textbf{Percentage} & \textbf{Standard Deviation} \\
+\midrule
+AUROC                  & 100.00 & \(3.7\times10^{-17}\) \\
+AUPR                   & 100.00 & 0.0 \\
+F1-Score               & 93.85  & 0.0 \\
+Precision              & 88.42  & 0.0 \\
+Recall                 & 99.99  & 0.0 \\
+Trustworthiness        & 92.97  & 0.35 \\
+Continuity             & 91.74  & 0.9 \\
+Uncertainty (Fault)    & 3.31   & 0.7 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Operating thresholds at the chosen operating point.}
+\label{tab:results_thresh}
+\footnotesize
+\begin{tabular}{@{}lc@{}}
+\toprule
+\textbf{Thresholding Rule} & \textbf{Value} \\
+\midrule
+Percentile-based threshold & 0.797 \\
+Extreme Value Theory (EVT) & 9.6 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\FloatBarrier
+
+\subsection{Visual Metrics}\label{subsec:visual}
+The three-dimensional PCA visualization in Figure 3 offers insight into the VAE’s learned latent space. In the \emph{top} panel, separation between normal (blue) and near-faulty (red) samples is evident: normal points form a compact cluster near the latent origin, whereas near-faulty points disperse along distinct directions. 
+This dispersion indicates that degradation manifests as deviations from the compact normal manifold consistent with reconstruction-based, unsupervised modeling. The \emph{bottom} panel zooms into the dense region containing most samples.  Here, the normal cluster becomes even more spherical and concentrated, while near-faulty points extend outward from the cluster boundary, tracing gradual trajectories away from nominal behavior. 
+This progressive drift reflects sensitivity to early-stage fault development, suggesting the model can surface anomalies before catastrophic failure. The explained variance ratios (EVR) of the first three principal components were approximately \(0.178\), \(0.148\), and \(0.131\), respectively. 
+While each component captures a modest share of variance individually, together they reveal meaningful structure in the latent space. Overall, these visualizations confirm that the VAE both distinguishes faulty from normal behavior and learns a representation consistent with fault progression.
+
+
+\begin{center}
+\begin{minipage}{\linewidth}
+  \centering
+  \includegraphics[width=\linewidth]{3.png}
+  \captionof{Fig. 3. {3D PCA of latent embeddings (top: overall view; bottom: zoomed-in dense region). Normal samples cluster tightly; near-faulty samples drift outward, consistent with progressive degradation.}
+  \label{fig:sensor-locs}
+\end{minipage}
+\end{center}
+ 
+  \vspace{30pt}
+  
+% -------- Results: Histogram + ROC (Figure 4) --------
+The histogram on the left of Figure 4 illustrates the distribution of reconstruction errors (log-scaled MSE) for normal and faulty bearing data as captured by the VAE under seed~303. The normal class (blue) forms a sharply peaked distribution centered around very low error values, reflecting the model’s ability to reconstruct normal operating conditions with high fidelity. In contrast, the faulty samples (orange) show a distinctly shifted distribution, with errors concentrated at much higher magnitudes. The clear separation between the two histograms indicates that the reconstruction error provides a highly discriminative signal for distinguishing between normal and anomalous states. Importantly, the lack of significant overlap suggests that the chosen thresholding approach, whether percentile-based or EVT, will achieve strong classification performance with minimal ambiguity. 
+
+The ROC curve on the right further supports this conclusion. The curve reaches the upper-left corner of the plot, corresponding to an AUROC of~1.0. This indicates perfect discrimination, with the model able to separate faulty from normal samples without error across all threshold settings. The steep rise to a true positive rate of~1.0 at nearly zero false-positive rate highlights the model’s robustness and reliability. Together, these results confirm that the VAE effectively leverages reconstruction error as a signal of degradation. The histogram demonstrates how well the latent space captures the underlying fault structure, while the ROC curve provides quantitative validation of separability, reinforcing the suitability of this unsupervised framework for bearing fault detection.
+
+
+\begin{center}
+\begin{minipage}{\linewidth}
+  \centering
+  \includegraphics[width=\linewidth]{4.png}
+  \captionof{Fig. 4. {Histogram (left) of log-scaled reconstruction errors for normal (blue) vs. faulty (orange) samples, and ROC curve (right).}
+  \label{fig:sensor-locs}
+\end{minipage}
+\end{center}
+
+\subsection{Real-Time}\label{subsec:realtime}
+We demonstrate real-time anomaly monitoring by replaying an unseen test dataset (Dataset~2) as if it were arriving from live sensors. Concretely, a CSV file containing precomputed feature vectors with an optional ground-truth column \(GT\in\{0,1\}\) is treated as a time-ordered stream: each row is consumed at a fixed pace, so every iteration represents the latest measurement from the machine. This mechanism validates end-to-end behavior on the edge device without wiring physical instrumentation, while preserving determinism and repeatability. At application start, four artifacts are loaded into memory: (1) a robust scaler fitted on the training distribution, ensuring incoming features are normalized exactly as during training; (2) an EVT-derived threshold \(\tau_{\mathrm{EVT}}\) providing a fixed, data-driven decision cutoff; (3) an INT8 TensorFlow Lite model for ultra-lightweight inference on the Nano; and (4) the test CSV to be replayed. For each row, the feature vector is normalized by the robust scaler, quantized to the model’s input scale/zero-point, evaluated by the TFLite interpreter, and then de-quantized. The anomaly score is the mean-squared reconstruction error in normalized space. To make results actionable at the equipment level, per-feature squared errors \(e_i=(x_i-\hat{x}_i)^2\) are ranked to obtain the Top-\(K\) contributors. Because feature names encode bearing IDs (e.g., \texttt{B1}, \texttt{B2}, \texttt{B3}, \texttt{B4}), the system aggregates the largest contributors back to specific bearings and flags a bearing only if at least one of its Top-\(K\) features exceeds a minimum error contribution. The graphical panel updates immediately: bearings remain green under normal operation and switch to red when high-contribution features indicate a fault signature. Average per-row inference time was \(\approx 0.6\text{--}0.7~\mathrm{ms}\), evidencing both responsiveness and correctness on the device.
+
+Operationally, each iteration logs the current latency and a running average to characterize steady-state performance on the Nano. When ground truth is available, the system performs an online comparison (prediction vs.\ \(GT\)), updates cumulative accuracy, and maintains TP/TN/FP/FN counts with a final summary at the end of the replay. A working example of the model simulation is provided here: \url{https://drive.google.com/file/d/1-K26dnsd9EeNuHNfYQ3tzsojwP7WAhQG/view?usp=sharing}.
+
+ \vspace{20pt} 
+
+
+\begin{center}
+\begin{minipage}{\linewidth}
+  \centering
+  \includegraphics[width=\linewidth]{5.png}
+  \captionof{Fig. 5. {Real-time simulation test on the trained model and unseen data}
+  \label{fig:sensor-locs}
+\end{minipage}
+\end{center}
+ \vspace{30pt} 
+
+\section{Discussion}\label{sec:discuss}
+The reviewed literature shows a clear trend toward unsupervised or weakly supervised approaches for bearing fault detection, yet many methods still presume access to high-end compute or adopt architectures that are difficult to deploy at the edge. Cheng \emph{et~al.} improved clustering by refining feature selection for autoencoders, and Marx \emph{et~al.} introduced domain-informed latent guidance via envelope-spectrum augmentation; both achieve meaningful gains but at the cost of nontrivial model complexity and computational requirements. Dai \emph{et~al.} (ADBR) combined self-supervised contrastive learning with wavelet preprocessing to obtain strong early-fault detection, yet the multi-stage pipeline can be burdensome for lightweight, real-time settings. PARA-LSTM delivers accurate long-horizon degradation forecasting, but recurrent models of this depth are typically resource-intensive for embedded deployment. In contrast, our work prioritizes practicality for edge devices. By coupling engineered time- and frequency-domain features with a compact variational autoencoder, we retain high discriminative power while enabling efficient inference on a Jetson Nano. Unlike Cotrino Herrera \emph{et~al.}, who demonstrated TinyML feasibility with simple MLP classifiers on low-cost boards, our method attains perfect AUROC and AUPR while respecting strict edge constraints. Thresholding via both a high-percentile rule and EVT further enhances reliability under severe class imbalance, an aspect not uniformly addressed in prior approaches. Overall, these findings indicate that competitive accuracy does not require ever-larger deep architectures when careful feature extraction, uncertainty-aware scoring, and lightweight design choices are applied. The proposed pipeline bridges state-of-the-art unsupervised fault detection with real-world embedded deployment, offering a practical alternative for industrial prognostics where compute and energy budgets are limited.
+ \vspace{30pt} 
+\section{Conclusion}\label{sec:conclusion}
+This study presented an unsupervised, feature-based VAE framework for bearing fault detection, emphasizing efficiency and practicality for embedded deployment. By leveraging handcrafted statistical and spectral features in combination with a lightweight autoencoder, the approach achieved perfect AUROC and AUPR on the NASA/IMS bearing dataset while operating in real time on a Jetson Nano. Percentile- and EVT-based thresholds enabled robust anomaly detection under imbalanced conditions, and uncertainty estimation via Monte Carlo sampling added diagnostic reliability. Compared with prior works that often rely on large-scale deep networks or cloud infrastructure, our method demonstrates that competitive accuracy is attainable within the strict constraints of edge devices. Despite these strengths, several limitations must be acknowledged. First, evaluation was restricted to the IMS dataset under constant speed and load, which may not fully reflect the variability encountered in industrial settings. Second, although engineered features reduce model complexity, they may limit adaptability across different machine types or sensor modalities. Third, threshold calibration still requires careful tuning to balance false alarms and missed detections, and the optimal strategy may vary across deployments. Finally, while inference was efficient, additional analysis of energy consumption and long-term stability under streaming conditions is needed for deployment at scale. Future work will address these limitations by extending validation to more diverse datasets with varying speeds, loads, and operating conditions. Transfer learning and domain adaptation techniques will be explored to enhance generalizability across different machines. Ablation studies comparing raw-signal deep models and hybrid feature-learning architectures will clarify trade-offs between handcrafted features and end-to-end approaches. Further, integration with explainable AI and multi-sensor fusion may provide richer fault attribution for industrial operators. Ultimately, the goal is to evolve this framework into a versatile, low-power diagnostic tool adaptable to a wide range of predictive maintenance scenarios.
+
+ \vspace{30pt} 
+\section*{AI Assistance Disclosure}
+This manuscript used AI-assisted writing tools (e.g., ChatGPT), Grammarly, and QuillBot for language editing (clarity, grammar, and style). These tools did not generate original scientific content, perform data analysis, or determine conclusions. All study design, experiments, results, and interpretations are the authors’ own, and the authors accept full responsibility for the content. No AI system is listed as an author.
+
+ \vspace{30pt} 
+
+
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}  
+
+
+\end{document}
